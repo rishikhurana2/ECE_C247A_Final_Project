@@ -281,7 +281,7 @@ class TDSConvEncoder(nn.Module):
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         return self.tds_conv_blocks(inputs)  # (T, N, num_features)
 
-
+""" Single head attention layer """
 class SingleHeadAttentionLayer(nn.Module):
     """ An attention layer for processing after spectogram normalization and rotation invariant processing
     
@@ -311,6 +311,7 @@ class SingleHeadAttentionLayer(nn.Module):
         return delta.permute(1, 0, 2) # (T_in, N, num_features)
 
 
+""" Transformer Block that uses single head attention """
 class TransformerLayer(nn.Module):
     """
         Transformer layer that consists of Attention and fully connected layer
@@ -318,25 +319,35 @@ class TransformerLayer(nn.Module):
 
     def __init__(self, num_features):
         super().__init__()
-        self.attn_layer = SingleHeadAttentionLayer(num_features)
 
         self.ln1 = nn.LayerNorm(num_features)
-
-        self.affine1 = nn.Linear(num_features, 4 * num_features)
-        self.affine2 = nn.Linear(4 * num_features, num_features)
+        self.attn_layer = SingleHeadAttentionLayer(num_features)
 
         self.ln2 = nn.LayerNorm(num_features)
+        self.fc_block = nn.Sequential(
+            nn.Linear(num_features, 4 * num_features),
+            nn.ReLU(),
+            nn.Linear(4 * num_features, num_features),
+        )
     
     def forward(self, x):
-        # attention + normalize (with skip connection)
-        x = x + self.attn_layer(x)
-        x = self.ln1(x)
-
-        # affine layers
-        delta_x = torch.relu(self.affine1(x)) # 4 * num_features
-        delta_x = self.affine2(delta_x)
+        # normalize + attention (with skip connection)
+        x = x + self.attn_layer(self.ln1(x))
         
-        # skip connection
-        x = x + delta_x
+        # normalize + MLP (with skip connection)
+        x = x + self.fc_block(self.ln2(x))
 
-        return self.ln2(x)
+        return x
+
+class TransformerNetwork(nn.Module):
+    def __init__(self, num_layers, num_features):
+        super().__init__()
+
+        self.transformer_list = nn.ModuleList()
+        for _ in range(num_layers):
+            self.transformer_list.append(TransformerLayer(num_features))
+    
+    def forward(self, x):
+        for transformer in self.transformer_list:
+            x = transformer(x) 
+        return x
