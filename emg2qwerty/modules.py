@@ -9,6 +9,8 @@ from collections.abc import Sequence
 import torch
 from torch import nn
 
+import math
+
 
 class SpectrogramNorm(nn.Module):
     """A `torch.nn.Module` that applies 2D batch normalization over spectrogram
@@ -37,7 +39,7 @@ class SpectrogramNorm(nn.Module):
         assert self.channels == bands * C
 
         x = inputs.movedim(0, -1)  # (N, bands=2, C=16, freq, T)
-        x = x.reshape(N, bands * C, freq, T)
+        x = x.reshape(N, bands * C, freq, T) # (N, Channels, freq, T)
         x = self.batch_norm(x)
         x = x.reshape(N, bands, C, freq, T)
         return x.movedim(-1, 0)  # (T, N, bands=2, C=16, freq)
@@ -270,7 +272,7 @@ class TDSConvEncoder(nn.Module):
             ), "block_channels must evenly divide num_features"
             tds_conv_blocks.extend(
                 [
-                    TDSConv2dBlock(channels, num_features // channels, kernel_width),
+                    TDSConv2dBlock(channels, num_features // channels, kernel_width), # width * channels = num_features
                     TDSFullyConnectedBlock(num_features),
                 ]
             )
@@ -278,3 +280,63 @@ class TDSConvEncoder(nn.Module):
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         return self.tds_conv_blocks(inputs)  # (T, N, num_features)
+
+
+class SingleHeadAttentionLayer(nn.Module):
+    """ An attention layer for processing after spectogram normalization and rotation invariant processing
+    
+    Args:
+        head_dim (int): dimension of a head for input of size
+        (T, N, num_features)
+    """
+    def __init__(self, num_features: int):
+        super().__init__()
+        self.Wq = nn.Linear(num_features, num_features)
+        self.Wk = nn.Linear(num_features, num_features)
+        self.Wv = nn.Linear(num_features, num_features)
+
+    def forward(self, inputs):
+        T_in, N, C = inputs.shape # C = num_features
+
+        x = inputs.permute(1, 0, 2) # (N, T_in, num_features)
+        
+        Q = self.Wq(x) # (N, T_in, num_features)
+        K = self.Wk(x)
+        V = self.Wv(x)
+
+        # a = softmax(QK^T/sqrt(d))V
+        attention = torch.softmax(torch.matmul(Q, torch.transpose(K, 1, 2)) / math.sqrt(C), dim=2) # (N, T_in, T_in)
+        delta     = torch.matmul(attention, V) # (N, T_in, num_features)
+
+        return delta.permute(1, 0, 2) # (T_in, N, num_features)
+
+
+class TransformerLayer(nn.Module):
+    """
+        Transformer layer that consists of Attention and fully connected layer
+    """
+
+    def __init__(self, num_features):
+        super().__init__()
+        self.attn_layer = SingleHeadAttentionLayer(num_features)
+
+        self.ln1 = nn.LayerNorm(num_features)
+
+        self.affine1 = nn.Linear(num_features, 4 * num_features)
+        self.affine2 = nn.Linear(4 * num_features, num_features)
+
+        self.ln2 = nn.LayerNorm(num_features)
+    
+    def forward(self, x):
+        # attention + normalize (with skip connection)
+        x = x + self.attn_layer(x)
+        x = self.ln1(x)
+
+        # affine layers
+        delta_x = torch.relu(self.affine1(x)) # 4 * num_features
+        delta_x = self.affine2(delta_x)
+        
+        # skip connection
+        x = x + delta_x
+
+        return self.ln2(x)
