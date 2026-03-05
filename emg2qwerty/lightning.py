@@ -25,7 +25,9 @@ from emg2qwerty.modules import (
     MultiBandRotationInvariantMLP,
     SpectrogramNorm,
     TDSConvEncoder,
-    TransformerNetwork
+    SingleHeadTransformerNetwork,
+    MultiHeadTransformerNetwork,
+    SinusoidalPositionalEncoding
 )
 from emg2qwerty.transforms import Transform
 
@@ -272,7 +274,7 @@ class TDSConvCTCModule(pl.LightningModule):
         )
 
 
-class TDSTransformerCTCModule(pl.LightningModule):
+class TransformerCTCModule(pl.LightningModule):
     NUM_BANDS: ClassVar[int] = 2
     ELECTRODE_CHANNELS: ClassVar[int] = 16
 
@@ -280,7 +282,8 @@ class TDSTransformerCTCModule(pl.LightningModule):
         self,
         in_features: int,
         mlp_features: Sequence[int],
-        num_transformer_layers: int,
+        transformer_dropout: float,
+        transformer_heads: Sequence[int],        
         optimizer: DictConfig,
         lr_scheduler: DictConfig,
         decoder: DictConfig,
@@ -300,10 +303,12 @@ class TDSTransformerCTCModule(pl.LightningModule):
                 in_features=in_features,
                 mlp_features=mlp_features,
                 num_bands=self.NUM_BANDS,
-            ),
+            ),            
             # (T, N, num_features)
             nn.Flatten(start_dim=2),
-            TransformerNetwork(num_transformer_layers, num_features),
+            # positional encoding to allow model to learn relative positions
+            SinusoidalPositionalEncoding(num_features),
+            MultiHeadTransformerNetwork(num_features, transformer_dropout, transformer_heads),
             # (T, N, num_classes)
             nn.Linear(num_features, charset().num_classes),
             nn.LogSoftmax(dim=-1),
