@@ -296,14 +296,6 @@ class ResNet18Model(nn.Module):
         self.layer3 = resnet_model.layer3
         self.layer4 = resnet_model.layer4
 
-        # prevent image from shrinking and remove downsampling
-        for layer in [self.layer2, self.layer3, self.layer4]:
-            for module in layer.modules():
-                if isinstance(module, nn.Conv2d):
-                    module.stride = (1,1)
-            if layer[0].downsample is not None:
-                layer[0].downsample[0].stride = (1,1)
-            
         self.pooling = nn.AdaptiveAvgPool2d((1,1))
         self.fc = nn.Linear(512, out_features)
 	
