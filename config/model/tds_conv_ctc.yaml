@@ -31,7 +31,9 @@ module:
   kernel_width: 32
   lstm_hidden_size: 256
   lstm_num_layers: 2
-  lstm_dropout: 0.2  
+  lstm_dropout: 0.2
+  electrode_channels: 16
+  selected_channels: null
     
   # -- Transformer Configurations --
 #   _target_: emg2qwerty.lightning.TransformerTDSConvCTCModule # Change this to change the model. Right now it is using the LSTM-enhanced module (our best one)
@@ -43,13 +45,10 @@ module:
 #   transformer_heads: [24, 24] # 8 transformer layers, each with 12 heads
 
 # -- ResNet Configurations --
-# _target_: emg2qwerty.lightning.ResNetCTCModule
-# in_features: 33  # freq only = (n_fft // 2 + 1)
-# optimizer:
+#   _target_: emg2qwerty.lightning.ResNetCTCModule
+#   in_features: 33  # freq only = (n_fft // 2 + 1)
+#   optimizer:
 #   lr: 0.0003
-
-
-
 
 datamodule:
   _target_: emg2qwerty.lightning.WindowedEMGDataModule
