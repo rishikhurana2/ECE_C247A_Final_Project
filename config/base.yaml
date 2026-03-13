@@ -21,6 +21,9 @@ trainer:
   devices: 1
   num_nodes: 1
   max_epochs: 50
+  # max_steps: 6000
+  # val_check_interval: 127
+  # check_val_every_n_epoch: null
   default_root_dir: ${hydra:runtime.output_dir}
 
 callbacks:

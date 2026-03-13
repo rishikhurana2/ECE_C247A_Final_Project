@@ -14,7 +14,7 @@ import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 from torch import nn
-from torch.utils.data import ConcatDataset, DataLoader
+from torch.utils.data import ConcatDataset, DataLoader, Subset
 from torchmetrics import MetricCollection
 
 from emg2qwerty import utils
@@ -42,6 +42,8 @@ class WindowedEMGDataModule(pl.LightningDataModule):
         batch_size: int,
         num_workers: int,
         train_sessions: Sequence[Path],
+        train_fraction: float,
+        seed: int,
         val_sessions: Sequence[Path],
         test_sessions: Sequence[Path],
         train_transform: Transform[np.ndarray, torch.Tensor],
@@ -64,6 +66,10 @@ class WindowedEMGDataModule(pl.LightningDataModule):
         self.val_transform = val_transform
         self.test_transform = test_transform
 
+        self.train_fraction = train_fraction
+        if self.train_fraction < 1.0:
+            self.seed = seed
+
     def setup(self, stage: str | None = None) -> None:
         self.train_dataset = ConcatDataset(
             [
@@ -77,6 +83,17 @@ class WindowedEMGDataModule(pl.LightningDataModule):
                 for hdf5_path in self.train_sessions
             ]
         )
+        #Editied for data splicing: 
+        if stage == "fit" or stage is None: 
+            if self.train_frac < 1.0:
+                total_samples = len(self.train_dataset)
+                subset_size = int(total_samples * self.train_frac)
+
+                generator = torch.Generator().manual_seed(self.seed)
+                indices = torch.randperm(total_samples, generator=generator).tolist()
+                subset_indices = indices[:subset_size]
+                self.train_dataset = Subset(self.train_dataset, subset_indices)
+                print(f"--- Data Ablation: Training on {subset_size}/{total_samples} samples ({self.train_fraction * 100}%) ---")
         self.val_dataset = ConcatDataset(
             [
                 WindowedEMGDataset(
@@ -96,8 +113,10 @@ class WindowedEMGDataModule(pl.LightningDataModule):
                     transform=self.test_transform,
                     # Feed the entire session at once without windowing/padding
                     # at test time for more realism
-                    window_length=self.window_length,
-                    padding=self.padding,
+                    window_length=None,
+                    padding=(0, 0),
+                    #window_length=self.window_length,
+                    #padding=self.padding,
                     jitter=False,
                 )
                 for hdf5_path in self.test_sessions
