@@ -5,6 +5,9 @@ module:
   in_features: 528
   mlp_features: [384]
 
+  block_channels: [24, 24, 24]
+  kernel_width: 32
+
   gru_hidden_size: 256
   gru_num_layers: 2
   gru_bidirectional: true
