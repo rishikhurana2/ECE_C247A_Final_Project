@@ -1,3 +1,7 @@
+# Our Project
+
+We investigated RNN, CNN, and Transformer architectures added on top of the baseline TDS Convolutional architecture discussed in the original emg2qwerty paper by Meta. Below is their README.
+
 # emg2qwerty
 [ [`Paper`](https://arxiv.org/abs/2410.20081) ] [ [`Dataset`](https://fb-ctrl-oss.s3.amazonaws.com/emg2qwerty/emg2qwerty-data-2021-08.tar.gz) ] [ [`Blog`](https://ai.meta.com/blog/open-sourcing-surface-electromyography-datasets-neurips-2024/) ] [ [`BibTeX`](#citing-emg2qwerty) ]
 
